@@ -99,12 +99,14 @@ export function renderTable(
     return;
   }
 
-  const rows = [...state.candidates].sort((a, b) => {
+  const compare = (a: Candidate, b: Candidate) => {
     const left = sortValue(a, sortKey, enabledIds);
     const right = sortValue(b, sortKey, enabledIds);
     const cmp = typeof left === 'string' ? left.localeCompare(right as string) : (left as number) - (right as number);
     return sortAsc ? cmp : -cmp;
-  });
+  };
+
+  const rows = [...state.candidates].sort(compare);
 
   const header = `
     <tr>
@@ -134,44 +136,84 @@ export function renderTable(
       <th></th>
     </tr>`;
 
-  const body = rows
-    .map((candidate) => {
-      const risk = summarizeRisk(candidate, enabledIds);
-      const cells = enabled
-        .map((def) => {
-          const { text, cls, title } = resultText(def, candidate.results[def.id]);
-          return `<td class="cell-${cls}" title="${escapeHtml(title)}">${escapeHtml(text)}</td>`;
-        })
-        .join('');
+  const renderRow = (candidate: Candidate, overBudget: boolean): string => {
+    const risk = summarizeRisk(candidate, enabledIds);
+    const cells = enabled
+      .map((def) => {
+        const { text, cls, title } = resultText(def, candidate.results[def.id]);
+        return `<td class="cell-${cls}" title="${escapeHtml(title)}">${escapeHtml(text)}</td>`;
+      })
+      .join('');
 
-      return `
-        <tr class="band-${risk.band}${candidate.id === selectedId ? ' selected' : ''}" data-id="${candidate.id}">
-          <td class="frozen frozen-1"><input class="cell-input" data-field="label" value="${escapeHtml(
-            candidate.label,
-          )}" placeholder="—"></td>
-          <td class="address frozen frozen-2"><button class="linklike" data-focus title="${escapeHtml(
-            candidate.address,
-          )}">${escapeHtml(candidate.address)}</button></td>
-          <td>${candidate.inZone === null ? '<span class="muted">—</span>' : candidate.inZone ? '✓' : '✕'}</td>
-          ${state.workplaces
-            .map((w) => {
-              const minutes = candidate.driveTimes[w.id];
-              return `<td class="num">${minutes === null || minutes === undefined ? '—' : Math.round(minutes)}</td>`;
-            })
-            .join('')}
-          <td class="num flags">${candidate.scored ? risk.flags : '…'}${
-            risk.unknowns ? `<span class="muted" title="${risk.unknowns} filter(s) have no data here"> +${risk.unknowns}?</span>` : ''
-          }</td>
-          <td class="num"><input class="cell-input num" data-field="price" value="${
-            candidate.price ?? ''
-          }" placeholder="—"></td>
-          <td class="num">${candidate.zipPrice ? money(candidate.zipPrice.medianSalePrice) : '<span class="muted">—</span>'}</td>
-          ${cells}
-          <td><input class="cell-input" data-field="notes" value="${escapeHtml(candidate.notes)}" placeholder="—"></td>
-          <td><button class="remove" data-remove title="Remove this address">×</button></td>
-        </tr>`;
-    })
-    .join('');
+    return `
+      <tr class="band-${risk.band}${candidate.id === selectedId ? ' selected' : ''}" data-id="${candidate.id}">
+        <td class="frozen frozen-1"><input class="cell-input" data-field="label" value="${escapeHtml(
+          candidate.label,
+        )}" placeholder="—"></td>
+        <td class="address frozen frozen-2"><button class="linklike" data-focus title="${escapeHtml(
+          candidate.address,
+        )}">${escapeHtml(candidate.address)}</button></td>
+        <td>${candidate.inZone === null ? '<span class="muted">—</span>' : candidate.inZone ? '✓' : '✕'}</td>
+        ${state.workplaces
+          .map((w) => {
+            const minutes = candidate.driveTimes[w.id];
+            return `<td class="num">${minutes === null || minutes === undefined ? '—' : Math.round(minutes)}</td>`;
+          })
+          .join('')}
+        <td class="num flags">${candidate.scored ? risk.flags : '…'}${
+          risk.unknowns ? `<span class="muted" title="${risk.unknowns} filter(s) have no data here"> +${risk.unknowns}?</span>` : ''
+        }</td>
+        <td class="num${overBudget ? ' cell-over' : ''}"${
+          overBudget ? ` title="${escapeHtml(money(candidate.price! - state.budget!))} over budget"` : ''
+        }><input class="cell-input num" data-field="price" value="${
+          candidate.price ?? ''
+        }" placeholder="—"></td>
+        <td class="num">${candidate.zipPrice ? money(candidate.zipPrice.medianSalePrice) : '<span class="muted">—</span>'}</td>
+        ${cells}
+        <td><input class="cell-input" data-field="notes" value="${escapeHtml(candidate.notes)}" placeholder="—"></td>
+        <td><button class="remove" data-remove title="Remove this address">×</button></td>
+      </tr>`;
+  };
+
+  // A max budget splits the table rather than filtering it: an address a little
+  // over asking is still worth seeing next to what it competes with. Both halves
+  // keep the current sort, so within budget you are still reading worst-hazard
+  // first (or whichever column you clicked).
+  const columnCount = 8 + state.workplaces.length + enabled.length;
+  const sectionRow = (title: string, detail: string) => `
+    <tr class="section">
+      <td colspan="${columnCount}"><span class="section-label">${escapeHtml(title)}
+        <span class="muted">${escapeHtml(detail)}</span></span></td>
+    </tr>`;
+
+  let body: string;
+  if (state.budget === null) {
+    body = rows.map((candidate) => renderRow(candidate, false)).join('');
+  } else {
+    const budget = state.budget;
+    // No asking price yet is not the same as over budget, so those rows stay in
+    // the top half; they are simply not ruled out.
+    const within = rows.filter((c) => c.price === null || c.price <= budget);
+    const over = rows.filter((c) => c.price !== null && c.price > budget);
+    const unpriced = within.filter((c) => c.price === null).length;
+
+    body =
+      sectionRow(
+        `Within ${money(budget)}`,
+        `${within.length - unpriced} address${within.length - unpriced === 1 ? '' : 'es'}${
+          unpriced ? `, plus ${unpriced} with no asking price yet` : ''
+        }`,
+      ) +
+      (within.length === 0
+        ? `<tr class="section-empty"><td colspan="${columnCount}">Nothing in this range yet.</td></tr>`
+        : within.map((candidate) => renderRow(candidate, false)).join('')) +
+      (over.length > 0
+        ? sectionRow(
+            `Over ${money(budget)}`,
+            `${over.length} address${over.length === 1 ? '' : 'es'}`,
+          ) + over.map((candidate) => renderRow(candidate, true)).join('')
+        : '');
+  }
 
   container.innerHTML = `
     <table class="results">
@@ -192,7 +234,7 @@ export function renderTable(
     });
   });
 
-  container.querySelectorAll<HTMLTableRowElement>('tbody tr').forEach((row) => {
+  container.querySelectorAll<HTMLTableRowElement>('tbody tr[data-id]').forEach((row) => {
     const id = row.dataset.id!;
 
     // Highlight on click, so a row stays readable once the address column is
@@ -202,7 +244,7 @@ export function renderTable(
     row.addEventListener('click', (event) => {
       const fromControl = (event.target as HTMLElement).closest('input, button, select, textarea');
       selectedId = selectedId === id && !fromControl ? null : id;
-      container.querySelectorAll('tbody tr').forEach((other) => {
+      container.querySelectorAll('tbody tr[data-id]').forEach((other) => {
         other.classList.toggle('selected', (other as HTMLElement).dataset.id === selectedId);
       });
     });

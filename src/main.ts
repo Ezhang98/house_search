@@ -483,9 +483,11 @@ function wireEvents(): void {
   });
 
   el('budget').addEventListener('change', (event) => {
-    const value = (event.target as HTMLInputElement).value;
+    const value = Number((event.target as HTMLInputElement).value);
     store.update((state) => {
-      state.budget = value ? Number(value) : null;
+      // Anything that is not a usable ceiling clears the split rather than
+      // sorting every address into the over-budget half.
+      state.budget = Number.isFinite(value) && value > 0 ? value : null;
     });
   });
 

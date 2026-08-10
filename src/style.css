@@ -314,6 +314,27 @@ td.cell-none { color: var(--muted); }
 td.cell-pending { color: var(--muted); }
 td.flags { font-weight: 700; }
 
+/* Budget split. The heading cell spans the whole table, so its text is stuck to
+   the left edge with a sticky span -- otherwise the label scrolls out of sight
+   the moment you move across to the hazard columns. */
+tr.section td, tr.section-empty td { background: #eef1f5; white-space: nowrap; }
+tr.section td { padding: 7px; border-top: 2px solid var(--border); }
+.section-label {
+  position: sticky;
+  left: 0;
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+.section-label .muted { font-weight: 400; letter-spacing: 0; }
+tr.section-empty td { color: var(--muted); font-style: italic; text-align: center; }
+
+/* Over budget is marked on the price cell only. Dimming the whole row would
+   fight the hazard banding, and opacity on a row makes the frozen columns
+   translucent enough to show what scrolls underneath them. */
+td.cell-over { color: #7f1d1d; font-weight: 600; }
+td.cell-over .cell-input { color: inherit; }
+
 .empty { padding: 26px; text-align: center; color: var(--muted); line-height: 1.6; }
 
 /* -------------------------------------------------------------- disclaimer */

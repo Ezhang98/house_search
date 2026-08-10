@@ -163,12 +163,16 @@ export function renderTable(
         <td class="num flags">${candidate.scored ? risk.flags : '…'}${
           risk.unknowns ? `<span class="muted" title="${risk.unknowns} filter(s) have no data here"> +${risk.unknowns}?</span>` : ''
         }</td>
-        <td class="num${overBudget ? ' cell-over' : ''}"${
-          overBudget ? ` title="${escapeHtml(money(candidate.price! - state.budget!))} over budget"` : ''
-        }><input class="cell-input num" data-field="price" value="${
+        <td class="num"><input class="cell-input num" data-field="price" value="${
           candidate.price ?? ''
         }" placeholder="—"></td>
-        <td class="num">${candidate.zipPrice ? money(candidate.zipPrice.medianSalePrice) : '<span class="muted">—</span>'}</td>
+        <td class="num${overBudget ? ' cell-over' : ''}"${
+          overBudget
+            ? ` title="ZIP median is ${escapeHtml(
+                money(candidate.zipPrice!.medianSalePrice - state.budget!),
+              )} over your budget"`
+            : ''
+        }>${candidate.zipPrice ? money(candidate.zipPrice.medianSalePrice) : '<span class="muted">—</span>'}</td>
         ${cells}
         <td><input class="cell-input" data-field="notes" value="${escapeHtml(candidate.notes)}" placeholder="—"></td>
         <td><button class="remove" data-remove title="Remove this address">×</button></td>
@@ -176,9 +180,14 @@ export function renderTable(
   };
 
   // A max budget splits the table rather than filtering it: an address a little
-  // over asking is still worth seeing next to what it competes with. Both halves
-  // keep the current sort, so within budget you are still reading worst-hazard
-  // first (or whichever column you clicked).
+  // over is still worth seeing next to what it competes with. Both halves keep
+  // the current sort, so within budget you are still reading worst-hazard first
+  // (or whichever column you clicked).
+  //
+  // The split is on the ZIP sold median, not the asking price. Asking is a
+  // number a seller made up for one house; the ZIP median is what the area
+  // actually transacts at, so it is the better read on whether a neighbourhood
+  // is in reach at all.
   const columnCount = 8 + state.workplaces.length + enabled.length;
   const sectionRow = (title: string, detail: string) => `
     <tr class="section">
@@ -191,18 +200,20 @@ export function renderTable(
     body = rows.map((candidate) => renderRow(candidate, false)).join('');
   } else {
     const budget = state.budget;
-    // No asking price yet is not the same as over budget, so those rows stay in
-    // the top half; they are simply not ruled out.
-    const within = rows.filter((c) => c.price === null || c.price <= budget);
-    const over = rows.filter((c) => c.price !== null && c.price > budget);
-    const unpriced = within.filter((c) => c.price === null).length;
+    // A missing ZIP median is not the same as over budget -- the price file only
+    // covers ZIPs with enough recent sales, and it loads asynchronously -- so
+    // those rows stay in the top half. They are not ruled out, just unanswered.
+    const median = (candidate: Candidate) => candidate.zipPrice?.medianSalePrice ?? null;
+    const within = rows.filter((c) => median(c) === null || median(c)! <= budget);
+    const over = rows.filter((c) => median(c) !== null && median(c)! > budget);
+    const unpriced = within.filter((c) => median(c) === null).length;
 
     body =
       sectionRow(
         `Within ${money(budget)}`,
         `${within.length - unpriced} address${within.length - unpriced === 1 ? '' : 'es'}${
-          unpriced ? `, plus ${unpriced} with no asking price yet` : ''
-        }`,
+          unpriced ? `, plus ${unpriced} with no ZIP median yet` : ''
+        } · by recent ZIP sold median`,
       ) +
       (within.length === 0
         ? `<tr class="section-empty"><td colspan="${columnCount}">Nothing in this range yet.</td></tr>`

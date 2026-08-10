@@ -1,6 +1,6 @@
 # House Search Map — Specification
 
-**Status:** Draft v0.1 — for review, not yet implemented
+**Status:** v1 implemented. This document records the design and the decisions behind it; `README.md` is the user-facing description.
 **Repo:** https://github.com/Ezhang98/house_search
 **Deploy target:** GitHub Pages (static)
 
@@ -39,12 +39,14 @@ No accounts, no backend, no database. State lives in the browser.
 ### 3.1 The static-hosting constraint
 
 GitHub Pages serves files. There is no server, so there is no place for a scraper to run at
-request time. "Scraping" therefore moves to **build time**: a scheduled GitHub Action fetches
-from public government GIS services, processes with GDAL/Python, tiles with Tippecanoe, and
-publishes the result as part of the site.
+request time. "Scraping" therefore moves to **build time**: `data/build_layers.py` fetches
+from public government GIS services and OpenStreetMap, normalises the fields, simplifies the
+geometry, and writes GeoJSON that is committed to the repo.
 
-The browser then loads static tiles. No API keys, no CORS negotiation, no upstream outages
-affecting visitors.
+*As built:* plain GeoJSON, loaded lazily per layer, rather than Tippecanoe-generated PMTiles.
+The California extracts came in far smaller than the estimates below (97 MB total, largest
+layer 22 MB), which made a tiling step unnecessary complexity for v1. The tradeoff is that
+switching on a large layer downloads it whole; revisit if layer sizes grow.
 
 ### 3.2 The one runtime dependency
 
@@ -77,12 +79,12 @@ a measured commute.
 .github/workflows/deploy.yml       # build app, combine with data, deploy-pages artifact
 ```
 
-- Data is **not committed to the repo**. It is produced during the workflow and uploaded via
-  `actions/upload-pages-artifact` → `actions/deploy-pages`. This avoids permanently bloating
-  git history with binary tiles.
-- Heavy fetch/tile steps are cached with `actions/cache`, keyed by layer name + source
-  vintage, so a normal app deploy does not re-download hundreds of megabytes.
-- Layers refresh on independent schedules (§4). A nightly job rebuilds only what is stale.
+*As built:* data **is** committed, and refreshing is manual (`refresh-data.yml`, dispatch
+only) rather than scheduled. Committing keeps a checkout reproducible and deploys fast; the
+cost is ~100 MB added to git history per full refresh, which is acceptable at a
+once-or-twice-a-year cadence and documented in `data/UPDATING.md` with the migration path if
+it stops being acceptable. Refreshing was left manual because these datasets change on scales
+from hours to years, and a nightly job would churn history for nothing.
 - Every layer emits a sidecar `<layer>.meta.json` with `{source_url, fetched_at,
   source_vintage, feature_count, license}`. The UI reads these for attribution and
   "data as of" stamps. **No layer ships without provenance metadata.**
@@ -91,10 +93,8 @@ a measured commute.
 
 Hard limits: 100 MB per file (GitHub), 1 GB per Pages site, 100 GB/month soft bandwidth.
 
-Target total: **under 400 MB**. PMTiles are served via HTTP range requests, so only the
-viewed tiles transfer — page weight stays small even when the archive is large. Sizes below
-are estimates to be confirmed in the Milestone 0 spike; any layer exceeding its budget gets
-more aggressive simplification or a lower max zoom before anything else is cut.
+Target total was **under 400 MB**. *Actual: 97 MB* across 12 files, largest 22 MB (flood).
+Well inside every limit, which is what made the simpler no-tiling approach viable.
 
 ---
 
@@ -108,26 +108,26 @@ All sources are public, free, and California-complete unless noted.
 |---|---|---|---|---|
 | Flood — Special Flood Hazard Area | FEMA NFHL MapServer, layer 28 | Monthly | 40–80 MB | Largest layer. Keep only zone code + subtype; drop all other attributes. |
 | Wildfire — Fire Hazard Severity Zone | CAL FIRE `fhsz24_5` FeatureServer | Quarterly | 10–25 MB | SRA + LRA; classes Moderate/High/Very High. |
-| Active fire perimeters | NIFC / WFIGS | **6-hourly** | <1 MB | Live-ish; the only fast-moving layer. |
+| ~~Active fire perimeters~~ | NIFC / WFIGS | — | — | **Deferred.** Needs a refresh cadence the committed-data model does not suit. |
 | Liquefaction zones | CGS `CGS_Liquefaction_Zones` | Yearly | 5–15 MB | Mapped quadrangles only — coverage gaps are real. |
 | Alquist-Priolo fault zones + traces | CGS | Yearly | <5 MB | |
 | Earthquake-induced landslide zones | CGS `CGS_Landslide_Zones` | Yearly | 5–15 MB | |
-| Quaternary faults | USGS | Yearly | <5 MB | Statewide; complements A-P zones outside mapped quads. |
-| Sea level rise / storm surge | NOAA Office for Coastal Management | Yearly | 10–20 MB | Coastal counties only. |
-| FEMA National Risk Index | FEMA NRI, census-tract level | Yearly | <10 MB | ~9,100 CA tracts × ~18 hazard ratings. Backbone of the table. |
+| ~~Quaternary faults~~ | USGS | — | — | **Deferred.** Would genuinely help outside mapped quadrangles; best next addition. |
+| ~~Sea level rise / storm surge~~ | NOAA | — | — | **Deferred.** Tsunami hazard areas ship instead. |
+| ~~FEMA National Risk Index~~ | FEMA NRI | — | — | **Deferred.** Its value was filling gaps outside California; with CA-only scope the state layers cover it. |
 
 ### 4.2 Infrastructure & industrial
 
 | Layer | Source | Refresh | Est. size | Notes |
 |---|---|---|---|---|
-| Freeways / major roads | OSM (Geofabrik `california-latest`) | Weekly | 10–20 MB | `motorway`/`trunk` + buffers (1000 ft / 500 ft, per existing `config.py`). |
-| Rail corridors | OSM `railway=rail\|light_rail`, minus service | Weekly | 5–10 MB | 0.25 mi buffer. |
+| Freeways / major roads | OSM via Overpass | Quarterly | 12 MB | Shipped as unbuffered lines; the table reports true nearest-distance instead of a buffer hit. |
+| Rail corridors | OSM `railway=rail\|light_rail`, minus service | Quarterly | 6 MB | Same — distance, not buffer. |
 | Airports + runway buffers | FAA / NTAD, OSM `aeroway` | Yearly | <5 MB | Buffer rings as a noise proxy; see §9 on true noise contours. |
 | Industrial land use | OSM `landuse=industrial` | Weekly | 5–15 MB | Best available substitute — **no national or state zoning dataset exists.** |
-| Mines | USGS MRDS + USMIN | Yearly | <5 MB | Point features, includes historic/inactive — flagged by status. |
-| Regulated facilities | EPA FRS / TRI / ECHO | Monthly | <10 MB | Points; TRI adds release-volume attributes. |
+| Mines | OSM `landuse=quarry`, `man_made=mineshaft` | Quarterly | shared | *Shipped via OSM rather than USGS MRDS* — one pipeline, one format. |
+| ~~Regulated facilities~~ | EPA FRS / TRI / ECHO | — | — | **Deferred.** Straightforward to add; see `data/UPDATING.md`. |
 | Power substations | OSM `power=substation` | Weekly | <5 MB | Proxy for heavy electrical infrastructure. |
-| **Data centers** | OSM `telecom=data_center` + curated `data/datacenters.csv` | Weekly | <1 MB | **Weakest layer — see §9.** |
+| **Data centers** | OSM `telecom=data_center` / `building=data_center` | Quarterly | <1 MB | **Weakest layer — 114 statewide. See §9.** Curated-CSV supplement not yet wired up. |
 
 ### 4.3 Basemap
 
@@ -277,19 +277,25 @@ Sortable by any column, filterable, CSV-exportable. Clicking a row flies the map
 
 ---
 
-## 11. Open questions
+## 11. Decisions taken during implementation
 
-1. **Repo layout** — archive the existing `commute-drivetime-map.html` under `legacy/`, or
-   drop it? It's a hand-calibrated Bay Area artifact and cannot be generalized.
-2. **`private/`** — currently gitignored, containing the requirements profile, avoidance
-   sites, and Python scripts. Recommend it stays out of the repo permanently; anything on the
-   Pages branch is world-readable. Is `avoidance_sites.csv` worth generalizing into the
-   curated data-center/nuisance layer?
-3. **Default map view** before a work address is entered — statewide California, or
-   geolocate?
-4. **Multi-workplace intersection** — confirmed v2, or wanted in v1?
-5. **Price layer** — the existing artifact has a Redfin ZCTA choropleth. Carry it forward? It
-   would need a licensed or manually refreshed source.
+1. **`commute-drivetime-map.html` archived** under `legacy/`. It is hand-calibrated to the Bay
+   Area and cannot generalize, but it is kept for reference.
+2. **`private/` stays gitignored permanently.** Anything reachable from the Pages branch is
+   world-readable.
+3. **Default view is statewide California**, before any workplace is entered.
+4. **Multi-workplace intersection shipped in v1**, with an all/any combine toggle.
+5. **Price layer carried forward and generalized** to all 1,579 California ZIPs, refreshed
+   from Redfin's public data center rather than hand-transcribed.
+6. **Display geometry and decision geometry were separated.** The prebaked polygons are
+   simplified for drawing; the table's per-address answers come from a live point query
+   against the publishing agency. A simplified edge is fine for painting a map and not fine
+   for deciding whether a parcel needs flood insurance.
+7. **Per-row drive times are estimated, not routed.** Routing every candidate against every
+   workplace would mean dozens of calls to a shared community server on every table edit.
+   Zone membership still comes from the real isochrone.
+8. **Layers split after download.** OpenStreetMap ships quarries alongside industrial land and
+   data centers alongside substations; those are separate findings and get separate columns.
 
 ---
 
@@ -303,5 +309,9 @@ Sortable by any column, filterable, CSV-exportable. Clicking a row flies the map
 | 3 | Data pipeline: 3 layers end-to-end (flood, fire, freeways) |
 | 4 | Remaining layers + layer panel with legends and provenance stamps |
 | 5 | Address table with hit-testing and three-state results |
-| 6 | Import/export/CSV/GeoJSON + share URL |
+| 6 | Import/export/CSV/GeoJSON |
 | 7 | Disclaimers, empty states, error states, mobile pass |
+
+All seven are complete. Not carried into v1: the compressed share-URL (export/import covers
+the same need without URL length limits) and PMTiles tiling (the plain GeoJSON layers are
+lazily loaded and adequate at current sizes; see `data/UPDATING.md` for when to revisit).

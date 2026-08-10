@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>California House Search — commute zones and hazards</title>
+    <meta
+      name="description"
+      content="Set one or more workplaces, see the drive-time zone, overlay California flood, fire, seismic and industrial hazard data, and score candidate addresses."
+    />
+  </head>
+  <body>
+    <header class="topbar">
+      <h1>California House Search</h1>
+      <nav class="tabs" role="tablist">
+        <button class="tab active" data-tab="hazards" role="tab">Commute &amp; hazards</button>
+        <button class="tab" data-tab="prices" role="tab">Sold prices</button>
+      </nav>
+      <div class="topbar-actions">
+        <button id="btn-import">Import</button>
+        <button id="btn-export">Export</button>
+        <input type="file" id="file-import" accept="application/json,.json" hidden />
+      </div>
+    </header>
+
+    <main class="layout">
+      <aside class="panel" id="panel">
+        <section class="panel-section">
+          <h2>Workplaces</h2>
+          <p class="hint">
+            Add one for each commute that matters. With more than one, the zone shown is where
+            <em>all</em> of them are reachable unless you switch to “any”.
+          </p>
+          <form id="form-work" class="row">
+            <input id="input-work" type="text" placeholder="Work address, city" autocomplete="off" />
+            <button type="submit">Add</button>
+          </form>
+          <ul id="work-list" class="work-list"></ul>
+          <div class="row compact">
+            <label for="zone-mode">Combine</label>
+            <select id="zone-mode">
+              <option value="all">Within all zones</option>
+              <option value="any">Within any zone</option>
+            </select>
+          </div>
+          <div class="row compact">
+            <label for="traffic">Traffic allowance</label>
+            <input id="traffic" type="range" min="1" max="2" step="0.05" value="1.35" />
+            <output id="traffic-out">1.35×</output>
+          </div>
+          <p class="hint" id="zone-status"></p>
+        </section>
+
+        <section class="panel-section">
+          <h2>Candidate addresses</h2>
+          <form id="form-candidate" class="row">
+            <input id="input-candidate" type="text" placeholder="Address to check" autocomplete="off" />
+            <button type="submit">Plot</button>
+          </form>
+          <p class="hint">Or click anywhere on the map to drop a pin there.</p>
+        </section>
+
+        <section class="panel-section" id="section-layers">
+          <h2>Filters</h2>
+          <p class="hint">
+            Switching a filter off removes it from the map <em>and</em> from the table and the flag count.
+          </p>
+          <div id="layer-list" class="layer-list"></div>
+        </section>
+
+        <section class="panel-section" id="section-price" hidden>
+          <h2>Sold prices</h2>
+          <p class="hint" id="price-meta">Loading…</p>
+          <div class="row compact">
+            <label for="budget">Max budget</label>
+            <input id="budget" type="number" placeholder="e.g. 1200000" step="10000" />
+          </div>
+          <div id="price-legend" class="legend"></div>
+        </section>
+      </aside>
+
+      <div class="map-wrap">
+        <div id="map"></div>
+        <div id="toast" class="toast" hidden></div>
+      </div>
+    </main>
+
+    <section class="table-wrap">
+      <div class="table-header">
+        <h2>Addresses</h2>
+        <div class="table-actions">
+          <span class="key"><i class="swatch band-green"></i>no flags</span>
+          <span class="key"><i class="swatch band-yellow"></i>1–2 flags</span>
+          <span class="key"><i class="swatch band-red"></i>3+ flags</span>
+          <button id="btn-csv">Export CSV</button>
+          <button id="btn-geojson">Export GeoJSON</button>
+        </div>
+      </div>
+      <div id="table" class="table-scroll"></div>
+    </section>
+
+    <footer class="disclaimer">
+      <p>
+        <strong>This is a screening tool, not a determination.</strong> Nothing here is a flood
+        certification, an insurance quote, a geotechnical assessment, or a property disclosure.
+        Hazard zones are drawn from published state and federal datasets that vary in age and
+        completeness; a “clear” result can mean the area was never mapped. Drive times are
+        estimates, not measured commutes. Verify anything that matters with the issuing agency and
+        a qualified professional before making a decision.
+      </p>
+      <p id="provenance" class="muted"></p>
+    </footer>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

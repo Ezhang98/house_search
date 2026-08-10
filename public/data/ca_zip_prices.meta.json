@@ -1,0 +1,16 @@
+{
+  "source": "Redfin Data Center - zip_code_market_tracker",
+  "source_url": "https://redfin-public-data.s3.us-west-2.amazonaws.com/redfin_market_tracker/zip_code_market_tracker.tsv000.gz",
+  "attribution": "Data provided by Redfin, a national real estate brokerage.",
+  "license_note": "Free to use with attribution to Redfin. See redfin.com/news/data-center/",
+  "property_type": "Single Family Residential",
+  "metric": "Homes-sold-weighted average of 90-day median sale prices over the trailing 12 months",
+  "period_duration_days": 90,
+  "periods_used": 4,
+  "period_start": "2025-08-31",
+  "period_end": "2026-05-31",
+  "upstream_last_updated": "2026-06-02 14:33:24.470 Z",
+  "generated_at": "2026-08-10T19:58:16Z",
+  "zip_count": 1579,
+  "rows_scanned": 9725026
+}

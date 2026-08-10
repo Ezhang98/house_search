@@ -1,0 +1,26 @@
+{
+  "name": "house-search-map",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Commute-zone and hazard map for California house hunting",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@turf/bbox": "^7.1.0",
+    "@turf/boolean-point-in-polygon": "^7.1.0",
+    "@turf/distance": "^7.1.0",
+    "@turf/helpers": "^7.1.0",
+    "@turf/intersect": "^7.1.0",
+    "@turf/nearest-point-on-line": "^7.1.0",
+    "maplibre-gl": "^4.7.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10"
+  }
+}

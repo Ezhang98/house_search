@@ -26,7 +26,9 @@ all of it in one table.
   single-family sale prices, and every address picks up its surrounding ZIP's
   figure.
 - **Import / export.** The whole session round-trips as JSON; the table also
-  exports to CSV and the points to GeoJSON.
+  exports to CSV and the points to GeoJSON. **Import also accepts a CSV of
+  addresses** — point it at a "Download All" export from Redfin or Zillow and it
+  plots the lot.
 
 ## What it is not
 
@@ -82,6 +84,38 @@ with a dashed border and labelled as an estimate rather than passed off as a
 drive-time zone.
 
 ---
+
+## Importing a CSV
+
+The Import button takes either a saved map (`.json`) or a CSV of addresses. It
+tells them apart by content, not by extension.
+
+Column names are matched case-insensitively and ignoring punctuation, so a
+Redfin or Zillow export works untouched:
+
+| Meaning | Headers recognised |
+| --- | --- |
+| Address | `address`, `street address`, `property address`, `addr`, `street` |
+| City / state / ZIP | `city`, `state or province`, `zip or postal code` — joined onto the street address |
+| Coordinates | `latitude`/`lat`, `longitude`/`lon`/`lng` |
+| Label | `label`, `nickname`, `name`, `MLS#` |
+| Price | `price`, `list price`, `asking price` |
+| Notes | `notes`, `remarks`, `comments` |
+| Rolled into notes if no notes column | `beds`, `baths`, `square feet`, `url` |
+
+Only an address column *or* a lat/lon pair is required; everything else is
+optional.
+
+**Rows that already have coordinates are plotted instantly.** Only rows without
+them get geocoded, at roughly one per second — Nominatim's usage policy asks for
+no more than that. A 200-row Redfin export therefore imports in a moment,
+because Redfin ships LATITUDE and LONGITUDE; a bare list of addresses takes
+about a second per row and shows a progress bar you can cancel, keeping whatever
+loaded.
+
+Nothing is dropped silently. Rows that fail to geocode, fall outside California,
+or have neither an address nor coordinates are listed afterwards with their line
+numbers. Addresses already in the table are skipped rather than duplicated.
 
 ## Development
 

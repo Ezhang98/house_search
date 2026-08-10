@@ -294,7 +294,11 @@ export class MapView {
       }
       marker.setLngLat([candidate.lon, candidate.lat]);
       const element = marker.getElement();
-      element.className = `marker marker-candidate band-${bandOf(candidate)}`;
+      // Only touch the band classes: MapLibre owns `maplibregl-marker` on this
+      // element, and that class is what positions it absolutely within the map.
+      for (const band of ['green', 'yellow', 'red']) {
+        element.classList.toggle(`band-${band}`, band === bandOf(candidate));
+      }
       element.title = candidate.label || candidate.address;
     }
     for (const [id, marker] of this.markers) {

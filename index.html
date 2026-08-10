@@ -17,9 +17,9 @@
         <button class="tab" data-tab="prices" role="tab">Sold prices</button>
       </nav>
       <div class="topbar-actions">
-        <button id="btn-import">Import</button>
+        <button id="btn-import" title="Load a saved map, or a CSV of addresses">Import</button>
         <button id="btn-export">Export</button>
-        <input type="file" id="file-import" accept="application/json,.json" hidden />
+        <input type="file" id="file-import" accept=".json,.csv,.tsv,application/json,text/csv" hidden />
       </div>
     </header>
 
@@ -84,6 +84,19 @@
         <div id="toast" class="toast" hidden></div>
       </div>
     </main>
+
+    <div id="import-status" class="modal" hidden>
+      <div class="modal-body">
+        <h2 id="import-title">Importing</h2>
+        <p id="import-text"></p>
+        <div class="progress"><div id="import-bar"></div></div>
+        <div id="import-detail" class="import-detail"></div>
+        <div class="modal-actions">
+          <button id="btn-import-cancel">Cancel</button>
+          <button id="btn-import-close" hidden>Close</button>
+        </div>
+      </div>
+    </div>
 
     <section class="table-wrap">
       <div class="table-header">

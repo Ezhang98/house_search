@@ -12,6 +12,10 @@ type SortKey = string;
 let sortKey: SortKey = 'risk';
 let sortAsc = true;
 
+// Which row the user has clicked to follow across a wide horizontal scroll.
+// Kept here rather than in the store: it is a reading aid, not portfolio data.
+let selectedId: string | null = null;
+
 const money = (value: number) =>
   value.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 
@@ -83,6 +87,8 @@ export function renderTable(
   const enabled = layers.filter((def) => state.enabledLayers[def.id]);
   const enabledIds = enabled.map((def) => def.id);
 
+  if (selectedId && !state.candidates.some((c) => c.id === selectedId)) selectedId = null;
+
   if (state.candidates.length === 0) {
     container.innerHTML = `
       <div class="empty">
@@ -102,8 +108,8 @@ export function renderTable(
 
   const header = `
     <tr>
-      <th data-sort="label" class="sortable">Label</th>
-      <th data-sort="address" class="sortable">Address</th>
+      <th data-sort="label" class="sortable frozen frozen-1">Label</th>
+      <th data-sort="address" class="sortable frozen frozen-2">Address</th>
       <th data-sort="zone" class="sortable" title="Inside the combined commute zone">Zone</th>
       ${state.workplaces
         .map(
@@ -139,9 +145,13 @@ export function renderTable(
         .join('');
 
       return `
-        <tr class="band-${risk.band}" data-id="${candidate.id}">
-          <td><input class="cell-input" data-field="label" value="${escapeHtml(candidate.label)}" placeholder="—"></td>
-          <td class="address"><button class="linklike" data-focus>${escapeHtml(candidate.address)}</button></td>
+        <tr class="band-${risk.band}${candidate.id === selectedId ? ' selected' : ''}" data-id="${candidate.id}">
+          <td class="frozen frozen-1"><input class="cell-input" data-field="label" value="${escapeHtml(
+            candidate.label,
+          )}" placeholder="—"></td>
+          <td class="address frozen frozen-2"><button class="linklike" data-focus title="${escapeHtml(
+            candidate.address,
+          )}">${escapeHtml(candidate.address)}</button></td>
           <td>${candidate.inZone === null ? '<span class="muted">—</span>' : candidate.inZone ? '✓' : '✕'}</td>
           ${state.workplaces
             .map((w) => {
@@ -184,6 +194,19 @@ export function renderTable(
 
   container.querySelectorAll<HTMLTableRowElement>('tbody tr').forEach((row) => {
     const id = row.dataset.id!;
+
+    // Highlight on click, so a row stays readable once the address column is
+    // the only thing left on screen. Toggling is done by swapping the class
+    // rather than re-rendering: a re-render would blow away the focus and
+    // caret of whichever notes field the user is typing in.
+    row.addEventListener('click', (event) => {
+      const fromControl = (event.target as HTMLElement).closest('input, button, select, textarea');
+      selectedId = selectedId === id && !fromControl ? null : id;
+      container.querySelectorAll('tbody tr').forEach((other) => {
+        other.classList.toggle('selected', (other as HTMLElement).dataset.id === selectedId);
+      });
+    });
+
     row.querySelector('[data-focus]')?.addEventListener('click', () => callbacks.onFocus(id));
     row.querySelector('[data-remove]')?.addEventListener('click', () => callbacks.onRemove(id));
     row.querySelectorAll<HTMLInputElement>('.cell-input').forEach((input) => {

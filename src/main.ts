@@ -18,11 +18,24 @@ import {
   ImportError,
   importPortfolio,
 } from './state/portfolio';
+import {
+  candidateFromRow,
+  CsvError,
+  dedupeKey,
+  planCsvImport,
+  type CsvPlan,
+} from './state/csvImport';
 import { blankCandidate, blankWorkplace, store } from './state/store';
 import { escapeHtml, renderTable } from './ui/table';
-import type { LayerManifest } from './types';
+import type { Candidate, LayerManifest } from './types';
 
 const BASE_URL = import.meta.env.BASE_URL;
+
+/**
+ * Delay between geocoding requests during a bulk import. Nominatim's usage
+ * policy asks for at most one request per second; this leaves headroom.
+ */
+const GEOCODE_INTERVAL_MS = 1100;
 
 const el = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
@@ -506,23 +519,192 @@ function wireEvents(): void {
   el('btn-import').addEventListener('click', () => el('file-import').click());
 
   el('file-import').addEventListener('change', async (event) => {
-    const file = (event.target as HTMLInputElement).files?.[0];
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
     if (!file) return;
     try {
-      const parsed = importPortfolio(JSON.parse(await file.text()));
-      store.replace({ ...store.get(), ...parsed });
-      renderLayerPanel();
-      for (const def of layers) {
-        if (store.get().enabledLayers[def.id]) void toggleLayer(def, true);
-      }
-      await rebuildZone();
-      toast(`Loaded ${parsed.candidates?.length ?? 0} addresses. Hazards are being re-checked against current data.`);
+      const text = await file.text();
+      // Dispatch on content, not just extension: a .txt holding a saved map
+      // should still load, and a .json full of listings should not be silently
+      // treated as a portfolio.
+      const looksJson = text.trimStart().startsWith('{');
+      if (looksJson) await importPortfolioFile(text);
+      else await importCsvFile(text);
     } catch (error) {
-      toast(error instanceof ImportError ? error.message : `Could not read that file: ${error}`, true, 9000);
+      toast(
+        error instanceof ImportError || error instanceof CsvError
+          ? error.message
+          : `Could not read that file: ${error}`,
+        true,
+        9000,
+      );
     } finally {
-      (event.target as HTMLInputElement).value = '';
+      input.value = '';
     }
   });
+
+  el('btn-import-cancel').addEventListener('click', () => {
+    importCancelled = true;
+  });
+  el('btn-import-close').addEventListener('click', () => {
+    el('import-status').hidden = true;
+  });
+}
+
+async function importPortfolioFile(text: string): Promise<void> {
+  const parsed = importPortfolio(JSON.parse(text));
+  store.replace({ ...store.get(), ...parsed });
+  renderLayerPanel();
+  for (const def of layers) {
+    if (store.get().enabledLayers[def.id]) void toggleLayer(def, true);
+  }
+  await rebuildZone();
+  toast(`Loaded ${parsed.candidates?.length ?? 0} addresses. Hazards are being re-checked against current data.`);
+}
+
+// ---------------------------------------------------------------------------
+// CSV import
+// ---------------------------------------------------------------------------
+
+let importCancelled = false;
+
+function showImportModal(title: string, text: string, showProgress: boolean): void {
+  el('import-status').hidden = false;
+  el('import-title').textContent = title;
+  el('import-text').innerHTML = text;
+  el('import-detail').innerHTML = '';
+  (el('import-bar').parentElement as HTMLElement).hidden = !showProgress;
+  el('import-bar').style.width = '0%';
+  el('btn-import-cancel').hidden = !showProgress;
+  el('btn-import-close').hidden = showProgress;
+}
+
+/**
+ * Import candidate addresses from a CSV — typically a "Download All" export
+ * from Redfin or Zillow.
+ *
+ * Rows that already carry latitude and longitude are plotted immediately;
+ * only the rest are geocoded, one at a time, because Nominatim's usage policy
+ * asks for no more than one request a second and a listing export can be
+ * hundreds of rows.
+ */
+async function importCsvFile(text: string): Promise<void> {
+  const plan = planCsvImport(text);
+  const existing = new Set(store.get().candidates.map((c) => dedupeKey(c.address, c.lat, c.lon)));
+
+  const matchedSummary = Object.entries(plan.matched)
+    .filter(([, header]) => header)
+    .map(([key, header]) => `<td><strong>${key}</strong></td><td>${escapeHtml(header!)}</td>`)
+    .map((cells) => `<tr>${cells}</tr>`)
+    .join('');
+
+  const seconds = Math.ceil((plan.needGeocoding * GEOCODE_INTERVAL_MS) / 1000);
+  showImportModal(
+    'Importing addresses',
+    `Found <strong>${plan.rows.length}</strong> rows. ` +
+      (plan.needGeocoding === 0
+        ? 'All of them have coordinates, so this will be instant.'
+        : `<strong>${plan.needGeocoding}</strong> need geocoding — roughly ${
+            seconds < 60 ? `${seconds} seconds` : `${Math.ceil(seconds / 60)} minutes`
+          }. You can cancel at any point and keep what has loaded.`),
+    true,
+  );
+  el('import-detail').innerHTML = `<div>Columns matched:</div><table>${matchedSummary}</table>`;
+
+  importCancelled = false;
+  const added: Candidate[] = [];
+  const failed: Array<{ line: number; address: string; reason: string }> = [];
+  const skipped: string[] = [];
+
+  for (let i = 0; i < plan.rows.length; i += 1) {
+    if (importCancelled) break;
+    const row = plan.rows[i];
+
+    el('import-bar').style.width = `${Math.round(((i + 1) / plan.rows.length) * 100)}%`;
+    el('import-text').innerHTML = `Row <strong>${i + 1}</strong> of ${plan.rows.length} — ${escapeHtml(
+      row.address.slice(0, 60),
+    )}`;
+
+    let lat = row.lat;
+    let lon = row.lon;
+    let address = row.address;
+
+    if (lat === null || lon === null) {
+      try {
+        await new Promise((resolve) => setTimeout(resolve, GEOCODE_INTERVAL_MS));
+        const result = await geocode(row.address);
+        if (result.outOfState) {
+          failed.push({ line: row.line, address: row.address, reason: 'outside California' });
+          continue;
+        }
+        lat = result.lat;
+        lon = result.lon;
+        address = result.address;
+      } catch (error) {
+        failed.push({
+          line: row.line,
+          address: row.address,
+          reason: error instanceof GeocodeError ? 'could not be geocoded' : String(error).slice(0, 60),
+        });
+        continue;
+      }
+    }
+
+    const key = dedupeKey(address, lat, lon);
+    if (existing.has(key)) {
+      skipped.push(row.address);
+      continue;
+    }
+    existing.add(key);
+    added.push(candidateFromRow(row, lat, lon, address));
+  }
+
+  if (added.length > 0) {
+    store.update((state) => {
+      state.candidates.push(...added);
+    });
+  }
+
+  reportImport(plan, added.length, failed, skipped);
+
+  // Score in the background so the table appears immediately.
+  void rescoreAll();
+}
+
+function reportImport(
+  plan: CsvPlan,
+  addedCount: number,
+  failed: Array<{ line: number; address: string; reason: string }>,
+  skipped: string[],
+): void {
+  const parts: string[] = [
+    `<strong>${addedCount}</strong> address${addedCount === 1 ? '' : 'es'} added.`,
+  ];
+  if (importCancelled) parts.push('Import was cancelled; everything loaded so far has been kept.');
+
+  showImportModal(importCancelled ? 'Import cancelled' : 'Import complete', parts.join(' '), false);
+
+  // Nothing is dropped quietly -- every row that did not make it is listed with
+  // its line number so it can be fixed and re-imported.
+  let detail = '';
+  if (failed.length > 0) {
+    detail += `<div class="bad"><strong>${failed.length} row${
+      failed.length === 1 ? '' : 's'
+    } could not be added:</strong><ul>${failed
+      .map((f) => `<li>Line ${f.line}: ${escapeHtml(f.address.slice(0, 70))} — ${escapeHtml(f.reason)}</li>`)
+      .join('')}</ul></div>`;
+  }
+  if (plan.rejected.length > 0) {
+    detail += `<div class="bad"><strong>${plan.rejected.length} ${
+      plan.rejected.length === 1 ? 'row was' : 'rows were'
+    } unusable:</strong><ul>${plan.rejected
+      .map((r) => `<li>Line ${r.line}: ${escapeHtml(r.reason)}</li>`)
+      .join('')}</ul></div>`;
+  }
+  if (skipped.length > 0) {
+    detail += `<div><strong>${skipped.length}</strong> already in the table, skipped.</div>`;
+  }
+  el('import-detail').innerHTML = detail || '<div>Every row imported cleanly.</div>';
 }
 
 void boot();

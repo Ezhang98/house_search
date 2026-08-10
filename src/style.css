@@ -194,6 +194,45 @@ input[type="text"], input[type="number"], select {
 }
 .toast.error { background: #7f1d1d; }
 
+/* ------------------------------------------------------------------- modal */
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+}
+.modal[hidden] { display: none; }
+.modal-body {
+  background: var(--panel);
+  border-radius: 10px;
+  padding: 20px 22px;
+  width: min(560px, 92vw);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+}
+.modal-body h2 { color: var(--text); font-size: 14px; text-transform: none; letter-spacing: 0; margin-bottom: 8px; }
+.modal-body p { margin: 0 0 12px; line-height: 1.5; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+
+.progress { height: 6px; background: #e8ebef; border-radius: 3px; overflow: hidden; }
+.progress[hidden] { display: none; }
+#import-bar { height: 100%; width: 0; background: var(--accent); transition: width 0.2s ease; }
+
+.import-detail {
+  margin-top: 12px;
+  max-height: 190px;
+  overflow-y: auto;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.import-detail ul { margin: 4px 0 0; padding-left: 18px; }
+.import-detail .bad { color: #7f1d1d; }
+.import-detail table { border-collapse: collapse; font-size: 11.5px; margin-top: 4px; }
+.import-detail td { padding: 1px 8px 1px 0; }
+
 /* ------------------------------------------------------------------- table */
 .table-wrap { background: var(--panel); border-top: 1px solid var(--border); padding: 12px 16px 20px; }
 .table-header { display: flex; align-items: center; gap: 14px; margin-bottom: 8px; }
@@ -212,6 +251,7 @@ table.results th {
   background: #f3f5f8;
   position: sticky;
   top: 0;
+  z-index: 3;
   font-weight: 600;
   font-size: 11.5px;
   line-height: 1.25;
@@ -222,15 +262,46 @@ th.sortable.desc::after { content: " ▼"; color: var(--accent); }
 td.num, th.num { text-align: right; }
 td.address { max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
 
+/* Label and address stay put while the rest of the columns scroll under them,
+   so a row can still be identified once the hazard columns are on screen.
+   The offset of the second column is the fixed width of the first. */
+table.results .frozen { position: sticky; z-index: 2; }
+table.results .frozen-1 { left: 0; width: 118px; min-width: 118px; max-width: 118px; }
+table.results .frozen-2 { left: 118px; min-width: 190px; }
+table.results thead .frozen { z-index: 4; }
+/* Collapsed borders do not travel with a sticky cell, so the divider that
+   separates the frozen block from the scrolling one is drawn as a shadow. */
+table.results .frozen-2 { box-shadow: 1px 0 0 var(--border), 7px 0 8px -7px rgba(15, 23, 42, 0.35); }
+table.results tbody .frozen { background: var(--row-bg, #fff); }
+
 .linklike { border: none; background: none; padding: 0; color: var(--accent); cursor: pointer; text-align: left; }
 .cell-input { width: 100%; border: none; background: transparent; font: inherit; padding: 1px 2px; }
 .cell-input:focus { background: #fff; outline: 1px solid var(--accent); border-radius: 3px; }
 .cell-input.num { text-align: right; }
 
-tr.band-green { background: var(--green); }
-tr.band-yellow { background: var(--yellow); }
-tr.band-red { background: var(--red); }
-tr.band-none { background: #fff; }
+/* The band colour goes through --row-bg so the frozen cells, which need an
+   opaque background of their own to cover what scrolls beneath them, can pick
+   up the same colour as the rest of the row. */
+tbody tr { --row-bg: #fff; background: var(--row-bg); cursor: pointer; }
+tr.band-green { --row-bg: var(--green); }
+tr.band-yellow { --row-bg: var(--yellow); }
+tr.band-red { --row-bg: var(--red); }
+tr.band-none { --row-bg: #fff; }
+
+tbody tr:hover { --row-bg: #eef2f7; }
+tr.band-green:hover { --row-bg: #cceada; }
+tr.band-yellow:hover { --row-bg: #f7e9be; }
+tr.band-red:hover { --row-bg: #f6cfcc; }
+
+tr.selected { --row-bg: #d9e6fb; }
+tr.band-green.selected { --row-bg: #c2e3d2; }
+tr.band-yellow.selected { --row-bg: #eddfb6; }
+tr.band-red.selected { --row-bg: #eecac8; }
+tr.selected td { border-top-color: var(--accent); border-bottom-color: var(--accent); }
+tr.selected td.frozen-1 { box-shadow: inset 3px 0 0 var(--accent); }
+tr.selected td.frozen-2 {
+  box-shadow: 1px 0 0 var(--border), 7px 0 8px -7px rgba(15, 23, 42, 0.35);
+}
 
 .swatch.band-green { background: var(--green-line); }
 .swatch.band-yellow { background: var(--yellow-line); }

@@ -310,7 +310,13 @@ export class MapView {
   }
 
   fitBounds(bounds: [number, number, number, number]): void {
-    this.map.fitBounds(bounds, { padding: 60, duration: 900 });
+    // Callers compute zones whether or not the map came up; a dead map should
+    // not turn a successful zone calculation into a thrown error.
+    try {
+      this.map.fitBounds(bounds, { padding: 60, duration: 900 });
+    } catch (error) {
+      console.warn('Could not fit bounds:', error);
+    }
   }
 
   resetView(): void {

@@ -210,9 +210,13 @@ async function toggleLayer(def: LayerDef, on: boolean): Promise<void> {
   if (on) {
     try {
       el('layer-list').classList.add('loading');
-      await mapView.ensureLayer(def, BASE_URL);
-      mapView.setLayerVisible(def, true);
+      // Build the query index first: scoring the table depends on it, drawing
+      // does not. If the map is broken the table must still work.
       await getIndex(def, BASE_URL);
+      void mapView
+        .ensureLayer(def, BASE_URL)
+        .then(() => mapView.setLayerVisible(def, true))
+        .catch((error) => console.warn(`Could not draw ${def.label}:`, error));
     } catch (error) {
       toast(`Could not load ${def.label}: ${(error as Error).message}`, true);
       store.update((state) => {
@@ -339,7 +343,9 @@ function ensurePrices(): Promise<void> {
   pricePromise = loadPrices(BASE_URL)
     .then((data) => {
       priceData = data;
-      mapView.setPriceData(data.polygons);
+      // The table only needs the joined table; only the choropleth needs the
+      // map, so that hand-off waits separately rather than gating the data.
+      void mapView.whenReady().then(() => mapView.setPriceData(data.polygons));
       renderPricePanel();
       store.update((state) => {
         for (const candidate of state.candidates) {
@@ -414,17 +420,16 @@ async function boot(): Promise<void> {
 
   wireEvents();
 
-  // Anything that draws on the map waits for the map, but only that.
-  void mapView.whenReady().then(() => {
-    for (const def of layers) {
-      if (store.get().enabledLayers[def.id]) void toggleLayer(def, true);
-    }
-    render();
-    if (store.get().workplaces.length > 0) void rebuildZone();
-    // Warm the price data quietly; a failure here must not surface as an error
-    // on a tab the user has not asked for.
-    void ensurePrices().catch(() => undefined);
-  });
+  for (const def of layers) {
+    if (state.enabledLayers[def.id]) void toggleLayer(def, true);
+  }
+
+  // Warm the price data quietly; a failure here must not surface as an error on
+  // a tab the user has not asked for.
+  void ensurePrices().catch(() => undefined);
+
+  if (state.workplaces.length > 0) void rebuildZone();
+  void mapView.whenReady().then(() => render());
 }
 
 function wireEvents(): void {

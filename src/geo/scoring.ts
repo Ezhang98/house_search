@@ -35,6 +35,15 @@ function interpretAuthoritative(layerId: string, rows: Record<string, unknown>[]
       const evacuate = String(first.Evacuate ?? '').toLowerCase();
       return evacuate.startsWith('no') ? null : 'Tsunami hazard area';
     }
+    // CGS zone layers carry no severity grading -- being inside the zone is
+    // the whole finding -- but the quadrangle name is worth surfacing, since
+    // it is what you quote when ordering the official report.
+    case 'liquefaction':
+      return `Liquefaction zone${first.QUAD_NAME ? ` (${first.QUAD_NAME} quad)` : ''}`;
+    case 'landslide':
+      return `Landslide zone${first.QUAD_NAME ? ` (${first.QUAD_NAME} quad)` : ''}`;
+    case 'fault':
+      return `Fault rupture zone${first.QUAD_NAME ? ` (${first.QUAD_NAME} quad)` : ''}`;
     default:
       return 'In mapped zone';
   }

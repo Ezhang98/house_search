@@ -133,7 +133,7 @@ export function renderTable(
         )
         .join('')}
       <th>Notes</th>
-      <th></th>
+      <th class="frozen frozen-r" title="Remove"></th>
     </tr>`;
 
   const renderRow = (candidate: Candidate, overBudget: boolean): string => {
@@ -175,7 +175,7 @@ export function renderTable(
         }>${candidate.zipPrice ? money(candidate.zipPrice.medianSalePrice) : '<span class="muted">—</span>'}</td>
         ${cells}
         <td><input class="cell-input" data-field="notes" value="${escapeHtml(candidate.notes)}" placeholder="—"></td>
-        <td><button class="remove" data-remove title="Remove this address">×</button></td>
+        <td class="frozen frozen-r"><button class="remove" data-remove title="Remove this address">×</button></td>
       </tr>`;
   };
 

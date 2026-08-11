@@ -237,7 +237,11 @@ input[type="text"], input[type="number"], select {
 .table-wrap { background: var(--panel); border-top: 1px solid var(--border); padding: 12px 16px 20px; }
 .table-header { display: flex; align-items: center; gap: 14px; margin-bottom: 8px; }
 .table-actions { margin-left: auto; display: flex; align-items: center; gap: 10px; font-size: 12px; }
-.table-scroll { overflow-x: auto; }
+/* The header row is sticky, but sticky is relative to the nearest scrolling
+   ancestor -- so the table needs to own its vertical scrolling too. Without the
+   height cap the page scrolls instead, and the header dutifully sticks to the
+   top of a box that is itself sliding out of view. */
+.table-scroll { overflow: auto; max-height: 62vh; }
 
 table.results { border-collapse: collapse; width: 100%; font-size: 12.5px; }
 table.results th, table.results td {
@@ -270,8 +274,22 @@ table.results .frozen-1 { left: 0; width: 118px; min-width: 118px; max-width: 11
 table.results .frozen-2 { left: 118px; min-width: 190px; }
 table.results thead .frozen { z-index: 4; }
 /* Collapsed borders do not travel with a sticky cell, so the divider that
-   separates the frozen block from the scrolling one is drawn as a shadow. */
+   separates the frozen block from the scrolling one is drawn as a shadow. The
+   header's bottom edge needs the same treatment once rows scroll under it. */
 table.results .frozen-2 { box-shadow: 1px 0 0 var(--border), 7px 0 8px -7px rgba(15, 23, 42, 0.35); }
+table.results thead th { box-shadow: 0 1px 0 var(--border); }
+table.results thead .frozen-2 {
+  box-shadow: 0 1px 0 var(--border), 1px 0 0 var(--border), 7px 0 8px -7px rgba(15, 23, 42, 0.35);
+}
+
+/* Remove pins to the right edge for the same reason Label and Address pin to
+   the left: on a table this wide you should not have to scroll to the far end
+   of a row to act on it. Its divider shadow points the other way. */
+table.results .frozen-r { right: 0; width: 34px; min-width: 34px; text-align: center; }
+table.results .frozen-r { box-shadow: -1px 0 0 var(--border), -7px 0 8px -7px rgba(15, 23, 42, 0.35); }
+table.results thead .frozen-r {
+  box-shadow: 0 1px 0 var(--border), -1px 0 0 var(--border), -7px 0 8px -7px rgba(15, 23, 42, 0.35);
+}
 table.results tbody .frozen { background: var(--row-bg, #fff); }
 
 .linklike { border: none; background: none; padding: 0; color: var(--accent); cursor: pointer; text-align: left; }

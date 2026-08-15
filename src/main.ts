@@ -320,6 +320,36 @@ async function addCandidateAt(address: string, lat: number, lon: number): Promis
   store.update(() => {});
 }
 
+function openClearConfirm(): void {
+  const count = store.get().candidates.length;
+  if (count === 0) {
+    toast('There are no addresses to clear.');
+    return;
+  }
+  el('confirm-clear-text').innerHTML = `<strong>${count}</strong> address${
+    count === 1 ? '' : 'es'
+  } and everything recorded against ${count === 1 ? 'it' : 'them'} — labels, notes, asking prices,
+    hazard results and drive-time estimates — will be removed from the table and the map.`;
+  el('confirm-clear').hidden = false;
+  el<HTMLButtonElement>('btn-clear-cancel').focus();
+}
+
+function closeClearConfirm(): void {
+  el('confirm-clear').hidden = true;
+}
+
+function clearCandidates(): void {
+  const count = store.get().candidates.length;
+  // Retire any scoring pass still walking the old list, or it would keep
+  // re-rendering on behalf of addresses that no longer exist.
+  scoringToken += 1;
+  store.update((state) => {
+    state.candidates = [];
+  });
+  closeClearConfirm();
+  toast(`Cleared ${count} address${count === 1 ? '' : 'es'}.`);
+}
+
 async function switchTab(tab: 'hazards' | 'prices'): Promise<void> {
   store.update((state) => {
     state.tab = tab;
@@ -516,6 +546,17 @@ function wireEvents(): void {
   el('btn-geojson').addEventListener('click', () => {
     const stamp = new Date().toISOString().slice(0, 10);
     download(`house-search-${stamp}.geojson`, exportGeoJson(store.get()), 'application/geo+json');
+  });
+
+  el('btn-clear').addEventListener('click', () => openClearConfirm());
+  el('btn-clear-cancel').addEventListener('click', () => closeClearConfirm());
+  el('btn-clear-confirm').addEventListener('click', () => clearCandidates());
+  el('confirm-clear').addEventListener('click', (event) => {
+    // Clicking the backdrop cancels; clicking inside the dialog does not.
+    if (event.target === el('confirm-clear')) closeClearConfirm();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !el('confirm-clear').hidden) closeClearConfirm();
   });
 
   el('btn-import').addEventListener('click', () => el('file-import').click());

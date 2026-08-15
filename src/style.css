@@ -215,6 +215,10 @@ input[type="text"], input[type="number"], select {
 .modal-body h2 { color: var(--text); font-size: 14px; text-transform: none; letter-spacing: 0; margin-bottom: 8px; }
 .modal-body p { margin: 0 0 12px; line-height: 1.5; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+/* Destructive confirmations read red, so the safe button is never the one that
+   catches the eye. */
+button.danger { border-color: var(--red-line); color: var(--red-line); }
+button.danger:hover { background: var(--red); border-color: var(--red-line); color: var(--red-line); }
 
 .progress { height: 6px; background: #e8ebef; border-radius: 3px; overflow: hidden; }
 .progress[hidden] { display: none; }

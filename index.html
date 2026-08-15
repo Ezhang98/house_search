@@ -98,6 +98,21 @@
       </div>
     </div>
 
+    <div id="confirm-clear" class="modal" hidden>
+      <div class="modal-body">
+        <h2>Clear all addresses?</h2>
+        <p id="confirm-clear-text"></p>
+        <p class="hint">
+          This cannot be undone. Workplaces, filters and your budget are kept. Export first if you
+          want a copy.
+        </p>
+        <div class="modal-actions">
+          <button id="btn-clear-cancel">Cancel</button>
+          <button id="btn-clear-confirm" class="danger">Clear all addresses</button>
+        </div>
+      </div>
+    </div>
+
     <section class="table-wrap">
       <div class="table-header">
         <h2>Addresses</h2>
@@ -107,6 +122,7 @@
           <span class="key"><i class="swatch band-red"></i>3+ flags</span>
           <button id="btn-csv">Export CSV</button>
           <button id="btn-geojson">Export GeoJSON</button>
+          <button id="btn-clear" title="Remove every candidate address and its results">Clear all</button>
         </div>
       </div>
       <div id="table" class="table-scroll"></div>

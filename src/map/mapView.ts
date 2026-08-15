@@ -299,7 +299,9 @@ export class MapView {
       for (const band of ['green', 'yellow', 'red']) {
         element.classList.toggle(`band-${band}`, band === bandOf(candidate));
       }
-      element.title = candidate.label || candidate.address;
+      // Label first, then the address: the label is what the user named the
+      // place, but on its own it does not say which house it is.
+      element.title = candidate.label ? `${candidate.label} — ${candidate.address}` : candidate.address;
     }
     for (const [id, marker] of this.markers) {
       if (!seen.has(id)) {
